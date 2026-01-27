@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "compilers-project"
+version = "0.0.0"
+description = ""
+authors = []
+readme = "README.md"
+packages = [{include = "compiler", from = "src", format = ["sdist"]}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+[tool.poetry.group.dev.dependencies]
+autopep8 = "^2.3.1"
+mypy = "^1.13.0"
+pytest = "^8.3.3"
+
+[tool.poetry.scripts]
+main = "compiler.__main__:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = "src"
+addopts = [
+    "--import-mode=importlib",
+]
+
+[virtualenvs]
+prefer-active-python = true
