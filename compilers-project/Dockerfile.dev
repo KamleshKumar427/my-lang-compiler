@@ -1,0 +1,24 @@
+FROM --platform=linux/amd64 debian:12
+
+RUN apt-get update \
+  && apt-get install -y build-essential python3 curl git zlib1g-dev libssl-dev libbz2-dev libffi-dev libreadline-dev liblzma-dev libsqlite3-dev \
+  && apt-get clean
+
+RUN curl https://pyenv.run | bash \
+  && echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bash_python_setup \
+  && echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_python_setup \
+  && echo 'eval "$(pyenv init -)"' >> ~/.bash_python_setup \
+  && echo 'source ~/.bash_python_setup' >> ~/.bashrc \
+  && echo 'source ~/.bash_python_setup' >> ~/.profile
+
+COPY .python-version /project/
+RUN cd /project && bash -lc 'pyenv install'
+
+RUN curl -sSL https://install.python-poetry.org | python3 - \
+ && echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_python_setup
+
+COPY pyproject.toml poetry.lock README.md /project/
+COPY src/compiler/__init__.py /project/src/compiler/
+RUN cd /project && bash -lc 'poetry install' && rm -Rf /project && mkdir -p /project
+
+WORKDIR /project
