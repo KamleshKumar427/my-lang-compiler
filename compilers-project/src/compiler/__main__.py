@@ -7,6 +7,7 @@ from traceback import format_exception
 from typing import Any
 
 from compiler.assembler import assemble_and_get_executable
+from compiler.intrinsics import all_intrinsics
 from compiler.ir_generator import generate_ir
 from compiler.parser import parse
 from compiler.tokenizer import tokenize
@@ -18,7 +19,7 @@ def call_compiler(source_code: str, input_file_name: str) -> bytes:
     tokens = tokenize(source_code)
     expr = parse(tokens)
     typecheck(expr)
-    reserved = set(create_global_symtab().locals.keys())
+    reserved = set(create_global_symtab().locals.keys()) | set(all_intrinsics.keys())
     instructions = generate_ir(reserved, expr)
     assembly = generate_assembly(instructions)
     return assemble_and_get_executable(assembly)

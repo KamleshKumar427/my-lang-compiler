@@ -23,6 +23,17 @@ print_int:
     movq %rsp, %rbp
     subq $32, %rsp
 
+    movabsq $0x8000000000000000, %r11
+    cmpq %r11, %rdi
+    jne .Lpi_start
+    movq $minint_str, %rsi
+    movq $20, %rdx
+    movq $1, %rax
+    movq $1, %rdi
+    syscall
+    jmp .Lpi_done
+
+.Lpi_start:
     movq %rdi, %rax
     movq $0, %rcx
     leaq -1(%rbp), %rsi
@@ -36,6 +47,7 @@ print_int:
     cmpq $0, %rax
     jne .Lpi_loop
     movb $48, (%rsi)
+    decq %rsi
     incq %rcx
     jmp .Lpi_after_digits
 
@@ -71,6 +83,7 @@ print_int:
     movq $1, %rdx
     syscall
 
+.Lpi_done:
     movq %rbp, %rsp
     popq %rbp
     movq $0, %rax
@@ -101,60 +114,58 @@ print_bool:
 read_int:
     pushq %rbp
     movq %rsp, %rbp
-
-    movq $0, %rax
-    movq $0, %rdi
-    movq $read_buf, %rsi
-    movq $64, %rdx
-    syscall
-    cmpq $0, %rax
-    jle .Lri_zero
-
-    movq %rax, %rcx
-    movq $read_buf, %rsi
     movq $0, %r9
     movq $1, %r8
 
 .Lri_skip:
-    cmpq $0, %rcx
-    je .Lri_done
-    movzbq (%rsi), %rax
-    cmpb $32, %al
-    je .Lri_adv
-    cmpb $10, %al
-    je .Lri_adv
-    cmpb $9, %al
-    je .Lri_adv
-    cmpb $13, %al
-    je .Lri_adv
-    jmp .Lri_sign
-.Lri_adv:
-    incq %rsi
-    decq %rcx
-    jmp .Lri_skip
-
-.Lri_sign:
-    cmpb $45, %al
-    jne .Lri_digits
+    movq $0, %rax
+    movq $0, %rdi
+    leaq read_buf(%rip), %rsi
+    movq $1, %rdx
+    syscall
+    cmpq $1, %rax
+    jne .Lri_eof
+    movzbq read_buf(%rip), %rcx
+    cmpb $32, %cl
+    je .Lri_skip
+    cmpb $10, %cl
+    je .Lri_skip
+    cmpb $9, %cl
+    je .Lri_skip
+    cmpb $13, %cl
+    je .Lri_skip
+    cmpb $45, %cl
+    jne .Lri_digit_loop
     movq $-1, %r8
-    incq %rsi
-    decq %rcx
 
-.Lri_digits:
-    cmpq $0, %rcx
-    je .Lri_done
-    movzbq (%rsi), %rax
-    cmpb $48, %al
+.Lri_read_after_sign:
+    movq $0, %rax
+    movq $0, %rdi
+    leaq read_buf(%rip), %rsi
+    movq $1, %rdx
+    syscall
+    cmpq $1, %rax
+    jne .Lri_eof
+    movzbq read_buf(%rip), %rcx
+
+.Lri_digit_loop:
+    cmpb $48, %cl
     jl .Lri_done
-    cmpb $57, %al
+    cmpb $57, %cl
     jg .Lri_done
     imulq $10, %r9, %r9
-    subb $48, %al
-    movzbq %al, %rax
+    subb $48, %cl
+    movzbq %cl, %rax
     addq %rax, %r9
-    incq %rsi
-    decq %rcx
-    jmp .Lri_digits
+    movq $0, %rax
+    movq $0, %rdi
+    leaq read_buf(%rip), %rsi
+    movq $1, %rdx
+    syscall
+    cmpq $1, %rax
+    jne .Lri_done
+    movzbq read_buf(%rip), %rcx
+    jmp .Lri_digit_loop
 
 .Lri_done:
     movq %r9, %rax
@@ -166,7 +177,7 @@ read_int:
     popq %rbp
     ret
 
-.Lri_zero:
+.Lri_eof:
     movq $0, %rax
     movq %rbp, %rsp
     popq %rbp
@@ -177,6 +188,8 @@ true_str:
     .asciz "true\n"
 false_str:
     .asciz "false\n"
+minint_str:
+    .asciz "-9223372036854775808\n"
 
 .section .bss
 read_buf:

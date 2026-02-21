@@ -91,6 +91,8 @@ def typecheck(node: ast.Expression, symtab: SymTab | None = None) -> Type:
 
         if isinstance(n, ast.VarDeclaration):
             value_type = check(n.value, env)
+            if n.name in env.locals:
+                raise Exception(f"{n.location}: variable already declared: {n.name}")
             if n.declared_type is not None:
                 _expect_type(value_type, n.declared_type, n)
                 env.define(n.name, n.declared_type)
@@ -141,7 +143,6 @@ def typecheck(node: ast.Expression, symtab: SymTab | None = None) -> Type:
             _expect_type(cond_type, Bool, n.condition)
             then_type = check(n.then_branch, env)
             if n.else_branch is None:
-                _expect_type(then_type, Unit, n.then_branch)
                 n.type = Unit
                 return Unit
             else_type = check(n.else_branch, env)

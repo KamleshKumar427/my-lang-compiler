@@ -60,7 +60,22 @@ def generate_assembly(instructions: list[ir.Instruction]) -> str:
     def emit(line: str) -> None:
         lines.append(line)
 
-    locals = Locals(variables=get_all_ir_variables(instructions))
+    def arg_ref(v: ir.IRVar) -> str:
+        if local_map.has(v):
+            return local_map.get_ref(v)
+        if v.name == "unit":
+            return "$0"
+        return f"{v.name}(%rip)"
+
+    def load_value(v: ir.IRVar, reg: str) -> None:
+        if local_map.has(v):
+            emit(f"movq {local_map.get_ref(v)}, {reg}")
+        elif v.name == "unit":
+            emit(f"movq $0, {reg}")
+        else:
+            emit(f"leaq {v.name}(%rip), {reg}")
+
+    local_map = Locals(variables=get_all_ir_variables(instructions))
 
     emit(".extern print_int")
     emit(".extern print_bool")
@@ -73,8 +88,8 @@ def generate_assembly(instructions: list[ir.Instruction]) -> str:
     emit("main:")
     emit("pushq %rbp")
     emit("movq %rsp, %rbp")
-    if locals.stack_used() > 0:
-        emit(f"subq ${locals.stack_used()}, %rsp")
+    if local_map.stack_used() > 0:
+        emit(f"subq ${local_map.stack_used()}, %rsp")
 
     for insn in instructions:
         emit(f"# {insn}")
@@ -83,50 +98,45 @@ def generate_assembly(instructions: list[ir.Instruction]) -> str:
             emit(f".L{insn.name}:")
         elif isinstance(insn, ir.LoadIntConst):
             if -2**31 <= insn.value < 2**31:
-                emit(f"movq ${insn.value}, {locals.get_ref(insn.dest)}")
+                emit(f"movq ${insn.value}, {local_map.get_ref(insn.dest)}")
             else:
                 emit(f"movabsq ${insn.value}, %rax")
-                emit(f"movq %rax, {locals.get_ref(insn.dest)}")
+                emit(f"movq %rax, {local_map.get_ref(insn.dest)}")
         elif isinstance(insn, ir.LoadBoolConst):
             value = 1 if insn.value else 0
-            emit(f"movq ${value}, {locals.get_ref(insn.dest)}")
+            emit(f"movq ${value}, {local_map.get_ref(insn.dest)}")
         elif isinstance(insn, ir.Copy):
-            if locals.has(insn.source):
-                emit(f"movq {locals.get_ref(insn.source)}, %rax")
-            else:
-                emit(f"leaq {insn.source.name}(%rip), %rax")
-            emit(f"movq %rax, {locals.get_ref(insn.dest)}")
+            load_value(insn.source, "%rax")
+            emit(f"movq %rax, {local_map.get_ref(insn.dest)}")
         elif isinstance(insn, ir.Jump):
             emit(f"jmp .L{insn.label.name}")
         elif isinstance(insn, ir.CondJump):
-            emit(f"cmpq $0, {locals.get_ref(insn.cond)}")
+            emit(f"cmpq $0, {local_map.get_ref(insn.cond)}")
             emit(f"jne .L{insn.then_label.name}")
             emit(f"jmp .L{insn.else_label.name}")
         elif isinstance(insn, ir.Call):
             if insn.fun.name in all_intrinsics:
-                arg_refs = [locals.get_ref(a) for a in insn.args]
+                arg_refs = [arg_ref(a) for a in insn.args]
                 all_intrinsics[insn.fun.name](
                     IntrinsicArgs(arg_refs=arg_refs, result_register="%rax", emit=emit)
                 )
-                emit(f"movq %rax, {locals.get_ref(insn.dest)}")
+                emit(f"movq %rax, {local_map.get_ref(insn.dest)}")
                 continue
 
             regs = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
             if len(insn.args) > len(regs):
                 raise Exception("Too many arguments for call")
             for reg, arg in zip(regs, insn.args, strict=False):
-                if locals.has(arg):
-                    emit(f"movq {locals.get_ref(arg)}, {reg}")
-                else:
-                    emit(f"leaq {arg.name}(%rip), {reg}")
-            if locals.has(insn.fun):
-                emit(f"movq {locals.get_ref(insn.fun)}, %rax")
+                load_value(arg, reg)
+            if local_map.has(insn.fun):
+                emit(f"movq {local_map.get_ref(insn.fun)}, %rax")
                 emit("callq *%rax")
             else:
                 emit(f"callq {insn.fun.name}")
-            emit(f"movq %rax, {locals.get_ref(insn.dest)}")
+            emit(f"movq %rax, {local_map.get_ref(insn.dest)}")
 
     emit("")
+    emit("movq $0, %rax")
     emit("movq %rbp, %rsp")
     emit("popq %rbp")
     emit("ret")

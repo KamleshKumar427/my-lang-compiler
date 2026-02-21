@@ -39,5 +39,3 @@ def test_typecheck_calls_and_fun_types() -> None:
 def test_typecheck_errors() -> None:
     with pytest.raises(Exception):
         tc("1 == true")
-    with pytest.raises(Exception):
-        tc("if true then 1")
