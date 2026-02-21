@@ -1,8 +1,23 @@
 import pytest
 
 import compiler.ast as ast
+import compiler.types as types
 from compiler.parser import parse
 from compiler.tokenizer import SourceLocation, tokenize
+
+
+def shape_type(t: types.Type | None) -> object:
+    if t is None:
+        return None
+    if t is types.Int:
+        return "Int"
+    if t is types.Bool:
+        return "Bool"
+    if t is types.Unit:
+        return "Unit"
+    if isinstance(t, types.FunType):
+        return ("fun", [shape_type(p) for p in t.params], shape_type(t.return_type))
+    raise AssertionError("unknown type")
 
 
 def shape(expr: ast.Expression) -> object:
@@ -28,7 +43,7 @@ def shape(expr: ast.Expression) -> object:
     if isinstance(expr, ast.Block):
         return ("block", [shape(e) for e in expr.expressions])
     if isinstance(expr, ast.VarDeclaration):
-        return ("var", expr.name, shape(expr.value))
+        return ("var", expr.name, shape_type(expr.declared_type), shape(expr.value))
     raise AssertionError("unknown node type")
 
 
@@ -103,7 +118,19 @@ def test_blocks_and_var() -> None:
     )
     assert parse_shape("{ var x = 1; x }") == (
         "block",
-        [("var", "x", ("lit", 1)), ("id", "x")],
+        [("var", "x", None, ("lit", 1)), ("id", "x")],
+    )
+    assert parse_shape("{ var f: (Int) => Unit = print_int; f(123) }") == (
+        "block",
+        [
+            (
+                "var",
+                "f",
+                ("fun", ["Int"], "Unit"),
+                ("id", "print_int"),
+            ),
+            ("call", ("id", "f"), [("lit", 123)]),
+        ],
     )
 
 

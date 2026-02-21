@@ -32,8 +32,8 @@ def tokenize(source_code: str) -> list[Token]:
     comment_hash_re = re.compile(r"#[^\n]*")
     identifier_re = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
     int_re = re.compile(r"[0-9]+")
-    operator_re = re.compile(r"==|!=|<=|>=|[+\-*/%]|=|[<>]")
-    punctuation_re = re.compile(r"[(){};,]")
+    operator_re = re.compile(r"==|!=|<=|>=|=>|[+\-*/%]|=|[<>]")
+    punctuation_re = re.compile(r"[(){};,:]")
 
     tokens: list[Token] = []
     i = 0

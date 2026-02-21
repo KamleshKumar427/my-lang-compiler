@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from compiler.tokenizer import SourceLocation, Token
 import compiler.ast as ast
+import compiler.types as types
 
 
 left_associative_binary_operators: list[list[str]] = [
@@ -45,9 +46,13 @@ def parse(tokens: list[Token]) -> ast.Expression:
         if name_token.type != "identifier":
             raise Exception(f"{name_token.loc}: expected an identifier")
         name_token = consume()
+        declared_type: types.Type | None = None
+        if peek().text == ":":
+            consume(":")
+            declared_type = parse_type()
         consume("=")
         value = parse_expression(False)
-        return ast.VarDeclaration(var_token.loc, name_token.text, value)
+        return ast.VarDeclaration(var_token.loc, name_token.text, value, declared_type)
 
     def parse_assignment() -> ast.Expression:
         left = parse_left_associative(0)
@@ -113,6 +118,31 @@ def parse(tokens: list[Token]) -> ast.Expression:
             token = consume()
             return ast.Identifier(token.loc, token.text)
         raise Exception(f"{token.loc}: expected expression")
+
+    def parse_type() -> types.Type:
+        token = peek()
+        if token.text == "(":
+            consume("(")
+            params: list[types.Type] = []
+            if peek().text != ")":
+                params.append(parse_type())
+                while peek().text == ",":
+                    consume(",")
+                    params.append(parse_type())
+            consume(")")
+            consume("=>")
+            ret = parse_type()
+            return types.FunType(params, ret)
+        if token.text == "Int":
+            consume()
+            return types.Int
+        if token.text == "Bool":
+            consume()
+            return types.Bool
+        if token.text == "Unit":
+            consume()
+            return types.Unit
+        raise Exception(f"{token.loc}: expected type")
 
     def parse_parenthesized() -> ast.Expression:
         consume("(")
