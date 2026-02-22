@@ -61,6 +61,12 @@ class Call(Instruction):
 
 
 @dataclass(frozen=True)
+class LoadParam(Instruction):
+    index: int
+    dest: IRVar
+
+
+@dataclass(frozen=True)
 class Jump(Instruction):
     label: "Label"
 
@@ -78,3 +84,8 @@ class Label(Instruction):
 
     def __str__(self) -> str:
         return self.name
+
+
+@dataclass(frozen=True)
+class Return(Instruction):
+    value: IRVar

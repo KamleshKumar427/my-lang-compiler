@@ -57,6 +57,21 @@ class Call(Expression):
 
 
 @dataclass
+class Break(Expression):
+    value: Expression | None = None
+
+
+@dataclass
+class Continue(Expression):
+    pass
+
+
+@dataclass
+class Return(Expression):
+    value: Expression | None
+
+
+@dataclass
 class Block(Expression):
     expressions: list[Expression]
 
@@ -66,3 +81,25 @@ class VarDeclaration(Expression):
     name: str
     value: Expression
     declared_type: Type | None = None
+
+
+@dataclass
+class FunctionParam:
+    name: str
+    type: Type
+
+
+@dataclass
+class FunctionDef:
+    location: Location
+    name: str
+    params: list[FunctionParam]
+    return_type: Type
+    body: Expression
+
+
+@dataclass
+class Module:
+    location: Location
+    functions: list[FunctionDef]
+    expressions: list[Expression]

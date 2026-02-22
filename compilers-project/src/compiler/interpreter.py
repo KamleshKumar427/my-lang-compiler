@@ -8,6 +8,20 @@ import compiler.ast as ast
 Value = int | bool | None | Callable[[list["Value"]], "Value"]
 
 
+class BreakSignal(Exception):
+    def __init__(self, value: Value | None) -> None:
+        self.value = value
+
+
+class ContinueSignal(Exception):
+    pass
+
+
+class ReturnSignal(Exception):
+    def __init__(self, value: Value | None) -> None:
+        self.value = value
+
+
 @dataclass
 class SymTab:
     parent: "SymTab | None" = None
@@ -105,7 +119,32 @@ def create_global_symtab() -> SymTab:
     return symtab
 
 
-def interpret(node: ast.Expression, symtab: SymTab) -> Value:
+def interpret(node: ast.Expression | ast.Module, symtab: SymTab | None = None) -> Value:
+    if symtab is None:
+        symtab = create_global_symtab()
+
+    if isinstance(node, ast.Module):
+        def make_function(fn_def: ast.FunctionDef) -> Callable[[list[Value]], Value]:
+            def _call(args: list[Value]) -> Value:
+                _expect_arity(fn_def.name, args, len(fn_def.params))
+                local = SymTab(symtab)
+                for param, arg in zip(fn_def.params, args, strict=True):
+                    local.define(param.name, arg)
+                try:
+                    return interpret(fn_def.body, local)
+                except ReturnSignal as ret:
+                    return ret.value
+            return _call
+
+        for fn in node.functions:
+            symtab.define(fn.name, make_function(fn))
+
+        top = SymTab(symtab)
+        module_result: Value = None
+        for expr in node.expressions:
+            module_result = interpret(expr, top)
+        return module_result
+
     if isinstance(node, ast.Literal):
         return node.value
 
@@ -160,7 +199,12 @@ def interpret(node: ast.Expression, symtab: SymTab) -> Value:
 
     if isinstance(node, ast.While):
         while interpret(node.condition, symtab):
-            interpret(node.body, symtab)
+            try:
+                interpret(node.body, symtab)
+            except ContinueSignal:
+                continue
+            except BreakSignal as br:
+                return br.value
         return None
 
     if isinstance(node, ast.Call):
@@ -170,11 +214,22 @@ def interpret(node: ast.Expression, symtab: SymTab) -> Value:
         args = [interpret(arg, symtab) for arg in node.args]
         return callee(args)
 
+    if isinstance(node, ast.Break):
+        value = interpret(node.value, symtab) if node.value is not None else None
+        raise BreakSignal(value)
+
+    if isinstance(node, ast.Continue):
+        raise ContinueSignal()
+
+    if isinstance(node, ast.Return):
+        value = interpret(node.value, symtab) if node.value is not None else None
+        raise ReturnSignal(value)
+
     if isinstance(node, ast.Block):
         child = SymTab(symtab)
-        result: Value = None
+        block_result: Value = None
         for expr in node.expressions:
-            result = interpret(expr, child)
-        return result
+            block_result = interpret(expr, child)
+        return block_result
 
     raise Exception(f"{node.location}: unknown expression")

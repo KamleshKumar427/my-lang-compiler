@@ -44,11 +44,20 @@ def shape(expr: ast.Expression) -> object:
         return ("block", [shape(e) for e in expr.expressions])
     if isinstance(expr, ast.VarDeclaration):
         return ("var", expr.name, shape_type(expr.declared_type), shape(expr.value))
+    if isinstance(expr, ast.Break):
+        return ("break", None if expr.value is None else shape(expr.value))
+    if isinstance(expr, ast.Continue):
+        return ("continue",)
+    if isinstance(expr, ast.Return):
+        return ("return", None if expr.value is None else shape(expr.value))
     raise AssertionError("unknown node type")
 
 
 def parse_shape(source: str) -> object:
-    return shape(parse(tokenize(source)))
+    module = parse(tokenize(source))
+    if len(module.expressions) == 1:
+        return shape(module.expressions[0])
+    return ("block", [shape(e) for e in module.expressions])
 
 
 def test_precedence_and_associativity() -> None:
@@ -140,8 +149,8 @@ def test_top_level_sequences() -> None:
 
 
 def test_locations() -> None:
-    expr = parse(tokenize("abc"))
-    assert expr.location == SourceLocation(1, 1)
+    module = parse(tokenize("abc"))
+    assert module.expressions[0].location == SourceLocation(1, 1)
 
 
 def test_errors() -> None:

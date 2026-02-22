@@ -6,9 +6,10 @@ from compiler.type_checker import create_global_symtab, typecheck
 
 
 def test_ir_smoke() -> None:
-    expr = parse(tokenize("1 + 2 * 3"))
-    typecheck(expr)
+    module = parse(tokenize("1 + 2 * 3"))
+    typecheck(module)
     reserved = set(create_global_symtab().locals.keys())
-    ins = generate_ir(reserved, expr)
+    functions = generate_ir(reserved, module)
+    ins = functions["main"]
     assert len(ins) > 0
     assert any(type(i).__name__ == "Call" for i in ins)

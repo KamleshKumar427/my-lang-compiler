@@ -17,11 +17,12 @@ from compiler.assembly_generator import generate_assembly
 
 def call_compiler(source_code: str, input_file_name: str) -> bytes:
     tokens = tokenize(source_code)
-    expr = parse(tokens)
-    typecheck(expr)
+    module = parse(tokens)
+    typecheck(module)
     reserved = set(create_global_symtab().locals.keys()) | set(all_intrinsics.keys())
-    instructions = generate_ir(reserved, expr)
-    assembly = generate_assembly(instructions)
+    reserved |= {fn.name for fn in module.functions}
+    functions = generate_ir(reserved, module)
+    assembly = generate_assembly(functions)
     return assemble_and_get_executable(assembly)
 
 

@@ -15,9 +15,23 @@ left_associative_binary_operators: list[list[str]] = [
 ]
 
 
-def parse(tokens: list[Token]) -> ast.Expression:
+def parse(tokens: list[Token]) -> ast.Module:
     pos = 0
     end_loc = tokens[-1].loc if tokens else SourceLocation(1, 1)
+    reserved_idents = {
+        "and",
+        "break",
+        "continue",
+        "do",
+        "else",
+        "fun",
+        "if",
+        "or",
+        "return",
+        "then",
+        "var",
+        "while",
+    }
 
     def peek() -> Token:
         if pos < len(tokens):
@@ -34,6 +48,17 @@ def parse(tokens: list[Token]) -> ast.Expression:
             raise Exception(f"{token.loc}: expected one of: {comma_separated}")
         pos += 1
         return token
+
+    def starts_expression(token: Token) -> bool:
+        if token.text in ["if", "while", "{", "("]:
+            return True
+        if token.type == "int_literal":
+            return True
+        if token.type == "identifier" and token.text not in reserved_idents:
+            return True
+        if token.text in ["true", "false"]:
+            return True
+        return False
 
     def parse_expression(allow_var: bool) -> ast.Expression:
         if allow_var and peek().text == "var":
@@ -95,6 +120,12 @@ def parse(tokens: list[Token]) -> ast.Expression:
 
     def parse_primary() -> ast.Expression:
         token = peek()
+        if token.text == "return":
+            return parse_return()
+        if token.text == "break":
+            return parse_break()
+        if token.text == "continue":
+            return parse_continue()
         if token.text == "if":
             return parse_if()
         if token.text == "while":
@@ -113,7 +144,7 @@ def parse(tokens: list[Token]) -> ast.Expression:
             if token.text == "false":
                 consume()
                 return ast.Literal(token.loc, False)
-            if token.text in ["then", "else", "do", "var", "and", "or"]:
+            if token.text in reserved_idents:
                 raise Exception(f"{token.loc}: expected expression")
             token = consume()
             return ast.Identifier(token.loc, token.text)
@@ -168,6 +199,24 @@ def parse(tokens: list[Token]) -> ast.Expression:
         body = parse_expression(False)
         return ast.While(while_token.loc, condition, body)
 
+    def parse_return() -> ast.Expression:
+        token = consume("return")
+        value: ast.Expression | None = None
+        if starts_expression(peek()):
+            value = parse_expression(False)
+        return ast.Return(token.loc, value)
+
+    def parse_break() -> ast.Expression:
+        token = consume("break")
+        value: ast.Expression | None = None
+        if starts_expression(peek()):
+            value = parse_expression(False)
+        return ast.Break(token.loc, value)
+
+    def parse_continue() -> ast.Expression:
+        token = consume("continue")
+        return ast.Continue(token.loc)
+
     def parse_block() -> ast.Expression:
         lbrace = consume("{")
         expressions: list[ast.Expression] = []
@@ -191,27 +240,64 @@ def parse(tokens: list[Token]) -> ast.Expression:
                 continue
             raise Exception(f"{peek().loc}: expected '{{' or '}}'")
 
-    def parse_top_level() -> ast.Expression:
+    def parse_function_def() -> ast.FunctionDef:
+        fun_token = consume("fun")
+        name_token = peek()
+        if name_token.type != "identifier":
+            raise Exception(f"{name_token.loc}: expected an identifier")
+        name_token = consume()
+        if name_token.text in reserved_idents:
+            raise Exception(f"{name_token.loc}: expected an identifier")
+        consume("(")
+        params: list[ast.FunctionParam] = []
+        if peek().text != ")":
+            while True:
+                param_name = peek()
+                if param_name.type != "identifier":
+                    raise Exception(f"{param_name.loc}: expected an identifier")
+                param_name = consume()
+                consume(":")
+                param_type = parse_type()
+                params.append(ast.FunctionParam(param_name.text, param_type))
+                if peek().text == ",":
+                    consume(",")
+                    continue
+                break
+        consume(")")
+        consume(":")
+        ret_type = parse_type()
+        body = parse_block()
+        return ast.FunctionDef(fun_token.loc, name_token.text, params, ret_type, body)
+
+    def parse_module() -> ast.Module:
         if peek().type == "end":
             raise Exception(f"{peek().loc}: expected expression")
+        module_loc = peek().loc
+        functions: list[ast.FunctionDef] = []
         expressions: list[ast.Expression] = []
         while True:
+            if peek().type == "end":
+                break
+            if peek().text == "fun":
+                functions.append(parse_function_def())
+                continue
             expressions.append(parse_expression(True))
             if peek().text == ";":
                 semi = consume(";")
                 if peek().type == "end":
                     expressions.append(ast.Literal(semi.loc, None))
-                    return ast.Block(expressions[0].location, expressions)
+                    break
                 continue
             if peek().type == "end":
-                if len(expressions) == 1:
-                    return expressions[0]
-                return ast.Block(expressions[0].location, expressions)
+                break
             if tokens[pos - 1].text == "}":
                 continue
+            if peek().text == "fun" and tokens[pos - 1].text == "}":
+                continue
             raise Exception(f"{peek().loc}: expected ';' or end of input")
+        return ast.Module(module_loc, functions, expressions)
 
-    result = parse_top_level()
+    result = parse_module()
     if peek().type != "end":
         raise Exception(f"{peek().loc}: unexpected input")
     return result
